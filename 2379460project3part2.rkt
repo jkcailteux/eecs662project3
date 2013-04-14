@@ -50,14 +50,81 @@
              (else (app (parse-cfwaer (car expr)) (parse-cfwaer (cadr expr))))))
           (else 'parse-cfwaer "Unexpected token"))))
 
+;;; Deferred substitution type
+(define-type DefrdSub
+  (mtSub)
+  (aSub (name symbol?) (value CFWAER-Value?) (ds DefrdSub?)))
 
+;;; ds lookup
+(define lookup
+  (lambda (name ds)
+    (type-case DefrdSub ds
+      (mtSub () (error 'lookup "variable not found"))
+      (aSub (n v d)
+            (if (symbol=? n name)
+                v
+                (lookup name d))))))
+
+;;; CFWAER Value type
+(define-type CFWAER-Value
+  (numV (n number?))
+  (closureV (arg symbol?)
+            (body CFWAER?)
+            (ds DefrdSub?)))
+
+;;; Interpreting function
+(define interp-cfwaer
+  (lambda (expr ds)
+    (type-case CFWAER expr
+      (num (n) (numV n))
+      (id (s) (lookup s ds))
+      (sub (lhs rhs) (numV (- (numV-n (interp-cfwaer lhs ds)) (numV-n (interp-cfwaer rhs ds)))))
+      (add (lhs rhs) (numV (+ (numV-n (interp-cfwaer lhs ds)) (numV-n (interp-cfwaer rhs ds)))))
+      (mul (lhs rhs) (numV (* (numV-n (interp-cfwaer lhs ds)) (numV-n (interp-cfwaer rhs ds)))))
+      (div (lhs rhs) (numV (/ (numV-n (interp-cfwaer lhs ds)) (numV-n (interp-cfwaer rhs ds)))))
+      (if0 (c t e) (cond ((= (numV-n (interp-cfwaer c ds)) 0)
+                          (interp-cfwaer t ds))
+                         (else (interp-cfwaer e ds))))
+      (fun (name body) (closureV name body ds))
+      (with (id expr body) 
+            (local
+              ((define fun-val (interp-cfwaer (fun id body) ds)))
+              (interp-cfwaer (closureV-body fun-val)
+                            (aSub (closureV-arg fun-val)
+                                  (interp-cfwaer expr ds)
+                                  (closureV-ds fun-val)))))
+      ;need to change rec
+      (rec (id expr body)
+        (local
+              ((define fun-val (interp-cfwaer (fun id body) ds)))
+              (interp-cfwaer (closureV-body fun-val)
+                            (aSub (closureV-arg fun-val)
+                                  (interp-cfwaer expr ds)
+                                  (closureV-ds fun-val)))))
+      (app (func arg)
+           (local
+             ((define fun-val (interp-cfwaer func ds)))
+             (interp-cfwaer (closureV-body fun-val)
+                          (aSub (closureV-arg fun-val)
+                                (interp-cfwaer arg ds)
+                                (closureV-ds fun-val))))))))
+
+
+
+;;; Eval function
+(define eval-cfwaer
+  (lambda (expr)
+    (interp-cfwaer (parse-cfwaer expr) (mtSub))))
 
 
 
 
 ;;; Factorial example from class.  Try (parse-cfwaer fac5) to see the parser produce an AST
 ;;; for the example.
-
 (define fac5
   `{rec {fac {fun {n} {if0 n 1 {* n {fac {+ n -1}}}}}}{fac 5}}
   )
+
+;;Test
+(parse-cfwaer fac5)
+(interp-cfwaer (parse-cfwaer fac5) (mtSub))
