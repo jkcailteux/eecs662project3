@@ -2,22 +2,36 @@
 ; KUID: 2379460
 ; Project 3 Part 1
 ; EECS 662
-; CFAE and CFWAE
+; CFWAE
 
 #lang plai
 
-;;; CFAE Value type
-(define-type CFAE-Value
+;;; CFWAE type
+(define-type CFWAE
+  (num (n number?))
+  (id (name symbol?))
+  (add (lhs CFWAE?) (rhs CFWAE?))
+  (sub (lhs CFWAE?) (rhs CFWAE?))
+  (mul (lhs CFWAE?) (rhs CFWAE?))
+  (div (lhs CFWAE?) (rhs CFWAE?))
+  (fun (fun-name symbol?) (body CFWAE?))
+  (app (func CFWAE?)(arg CFWAE?))
+  (if0 (c CFWAE?) (t CFWAE?) (e CFWAE?))
+  (with (id symbol?) (named-expr CFWAE?) (body CFWAE?)))
+
+
+;;; CFWAE Value type - requirement #1
+(define-type CFWAE-Value
   (numV (n number?))
   (closureV (arg symbol?)
-            (body CFAE?)
+            (body CFWAE?)
             (ds DefrdSub?)))
 
 
 ;;; Deferred substitution type
 (define-type DefrdSub
   (mtSub)
-  (aSub (name symbol?) (value CFAE-Value?) (ds DefrdSub?)))
+  (aSub (name symbol?) (value CFWAE-Value?) (ds DefrdSub?)))
 
 
 ;;; ds lookup
@@ -31,122 +45,47 @@
                 (lookup name d))))))
 
 
-;;; CFAE type
-(define-type CFAE
-  (num (n number?))
-  (id (name symbol?))
-  (add (lhs CFAE?) (rhs CFAE?))
-  (sub (lhs CFAE?) (rhs CFAE?))
-  (mul (lhs CFAE?) (rhs CFAE?))
-  (div (lhs CFAE?) (rhs CFAE?))
-  (fun (fun-name symbol?) (body CFAE?))
-  (app (func CFAE?)(arg CFAE?))
-  (if0 (c CFAE?) (t CFAE?) (e CFAE?)))
 
 
-;;; Interpreting function
-(define interp-cfae
-  (lambda (expr ds)
-    (type-case CFAE expr
-      (num (n) (numV n))
-      (id (s) (lookup s ds))
-      (sub (lhs rhs) (numV (- (numV-n (interp-cfae lhs ds)) (numV-n (interp-cfae rhs ds)))))
-      (add (lhs rhs) (numV (+ (numV-n (interp-cfae lhs ds)) (numV-n (interp-cfae rhs ds)))))
-      (mul (lhs rhs) (numV (* (numV-n (interp-cfae lhs ds)) (numV-n (interp-cfae rhs ds)))))
-      (div (lhs rhs) (numV (/ (numV-n (interp-cfae lhs ds)) (numV-n (interp-cfae rhs ds)))))
-      (if0 (c t e) (cond ((= (numV-n (interp-cfae c ds)) 0)
-                          (interp-cfae t ds))
-                         (else (interp-cfae e ds))))
-      (fun (name body) (closureV name body ds))
-      (app (func arg)
-           (local
-             ((define fun-val (interp-cfae func ds)))
-             (interp-cfae (closureV-body fun-val)
-                          (aSub (closureV-arg fun-val)
-                                (interp-cfae arg ds)
-                                (closureV-ds fun-val))))))))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Part II ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; CFWAE type
-(define-type CFWAE
-  (numw (n number?))
-  (idw (name symbol?))
-  (addw (lhs CFWAE?) (rhs CFWAE?))
-  (subw (lhs CFWAE?) (rhs CFWAE?))
-  (mulw (lhs CFWAE?) (rhs CFWAE?))
-  (divw (lhs CFWAE?) (rhs CFWAE?))
-  (funw (fun-name symbol?) (body CFWAE?))
-  (appw (func CFWAE?)(arg CFWAE?))
-  (if0w (c CFWAE?) (t CFWAE?) (e CFWAE?))
-  (withw (id symbol?) (named-expr CFWAE?) (body CFWAE?)))
-
-
-;;; Parsing function
+;;; Parsing function - requirement #2
 (define parse-cfwae
   (lambda (expr)
-    (cond ((symbol? expr) (idw expr))
-          ((number? expr) (numw expr))
+    (cond ((symbol? expr) (id expr))
+          ((number? expr) (num expr))
           ((list? expr)
            (case (car expr)
              ((-) (cond ((fun? (parse-cfwae (cadr expr))) 
                          error  parse-cfwae "arithmetic operation cannot be performed on a function")
                         ((fun? (parse-cfwae (caddr expr)))
                          error  parse-cfwae "arithmetic operation cannot be performed on a function")
-                        (else (subw (parse-cfwae (cadr expr)) (parse-cfwae (caddr expr))))))
+                        (else (sub (parse-cfwae (cadr expr)) (parse-cfwae (caddr expr))))))
              ((+) (cond ((fun? (parse-cfwae (cadr expr))) 
                          error  parse-cfwae "arithmetic operation cannot be performed on a function")
                         ((fun? (parse-cfwae (caddr expr)))
                          error  parse-cfwae "arithmetic operation cannot be performed on a function")
-                        (else (addw (parse-cfwae (cadr expr)) (parse-cfwae (caddr expr))))))
+                        (else (add (parse-cfwae (cadr expr)) (parse-cfwae (caddr expr))))))
              ((*) (cond ((fun? (parse-cfwae (cadr expr))) 
                          error  parse-cfwae "arithmetic operation cannot be performed on a function")
                         ((fun? (parse-cfwae (caddr expr)))
                          error  parse-cfwae "arithmetic operation cannot be performed on a function")
-                        (else (mulw (parse-cfwae (cadr expr)) (parse-cfwae (caddr expr))))))
+                        (else (mul (parse-cfwae (cadr expr)) (parse-cfwae (caddr expr))))))
              ((/) (cond ((fun? (parse-cfwae (cadr expr))) 
                          error  parse-cfwae "arithmetic operation cannot be performed on a function")
                         ((fun? (parse-cfwae (caddr expr)))
                          error  parse-cfwae "arithmetic operation cannot be performed on a function")
-                        (else (divw (parse-cfwae (cadr expr)) (parse-cfwae (caddr expr))))))
-             ((if0) (if0w (parse-cfwae (cadr expr))
+                        (else (div (parse-cfwae (cadr expr)) (parse-cfwae (caddr expr))))))
+             ((if0) (if0 (parse-cfwae (cadr expr))
                           (parse-cfwae (caddr expr))
                           (parse-cfwae (cadddr expr))))
-             ((with) (withw (caadr expr)
+             ((with) (with (caadr expr)
                            (parse-cfwae (cadadr expr))
                            (parse-cfwae (caddr expr))))
              ((fun) (if (number? (cadr expr))
                         (error  parse-cfwae "cannot call a number like a function")
-                        (funw (cadr expr) (parse-cfwae (caddr expr)))))
-             (else (appw (parse-cfwae (car expr)) (parse-cfwae (cadr expr))))))
+                        (fun (cadr expr) (parse-cfwae (caddr expr)))))
+             (else (app (parse-cfwae (car expr)) (parse-cfwae (cadr expr))))))
           (else parse-cfwae "Unexpected token"))))
 
-
-
-;;; Elaborator function
-(define elab-cfwae
-  (lambda (expr)
-    (type-case CFWAE expr
-      (numw (n) (num n))
-      (idw (s) (id s))
-      (subw (lhs rhs) (sub (elab-cfwae lhs) (elab-cfwae rhs)))
-      (addw (lhs rhs) (add (elab-cfwae lhs) (elab-cfwae rhs)))
-      (mulw (lhs rhs) (mul (elab-cfwae lhs) (elab-cfwae rhs)))
-      (divw (lhs rhs) (div (elab-cfwae lhs) (elab-cfwae rhs)))
-      (funw (fun-name body) (fun fun-name (elab-cfwae body)))
-      (appw (func arg) (app (elab-cfwae func) (elab-cfwae arg)))
-      (if0w (c t e) (if0 (elab-cfwae c) (elab-cfwae t) (elab-cfwae e)))
-      (withw (name named-expr body) (app (fun name (elab-cfwae body)) (elab-cfwae named-expr)))
-      )))
-
-
-;;; Helper function for elaborating cond0
-(define elab-cond0w
-  (lambda (ce ed)
-    (cond ((empty? ce) ed)
-          (else (if0 (elab-cfwae (caar ce))
-                     (elab-cfwae (cadar ce))
-                     (elab-cond0w (cdr ce) ed))))))
 
 ;;; Prelude (pi, g, area, inc)
 (define prelude
@@ -155,11 +94,40 @@
               (aSub 'area (closureV 'r (mul (num 3.14159) (mul (id 'r) (id 'r))) (mtSub))
                     (aSub 'inc (closureV 'i (add (id 'i) (num 1)) (mtSub)) (mtSub))))))
 
+;;; Interpreting function - requirement #3
+(define interp-cfwae
+  (lambda (expr ds)
+    (type-case CFWAE expr
+      (num (n) (numV n))
+      (id (s) (lookup s ds))
+      (sub (lhs rhs) (numV (- (numV-n (interp-cfwae lhs ds)) (numV-n (interp-cfwae rhs ds)))))
+      (add (lhs rhs) (numV (+ (numV-n (interp-cfwae lhs ds)) (numV-n (interp-cfwae rhs ds)))))
+      (mul (lhs rhs) (numV (* (numV-n (interp-cfwae lhs ds)) (numV-n (interp-cfwae rhs ds)))))
+      (div (lhs rhs) (numV (/ (numV-n (interp-cfwae lhs ds)) (numV-n (interp-cfwae rhs ds)))))
+      (if0 (c t e) (cond ((= (numV-n (interp-cfwae c ds)) 0)
+                          (interp-cfwae t ds))
+                         (else (interp-cfwae e ds))))
+      (fun (name body) (closureV name body ds))
+      (with (id expr body) 
+            (local
+              ((define fun-val (interp-cfwae (fun id body) ds)))
+              (interp-cfwae (closureV-body fun-val)
+                            (aSub (closureV-arg fun-val)
+                                  (interp-cfwae expr ds)
+                                  (closureV-ds fun-val)))))
+      (app (func arg)
+           (local
+             ((define fun-val (interp-cfwae func ds)))
+             (interp-cfwae (closureV-body fun-val)
+                          (aSub (closureV-arg fun-val)
+                                (interp-cfwae arg ds)
+                                (closureV-ds fun-val))))))))
 
-;;; Eval function
+
+;;; Eval function  - requirement #4
 (define eval-cfwae
-  (lambda (cfae)
-    (interp-cfae (elab-cfwae (parse-cfwae cfae)) prelude)))
+  (lambda (expr)
+    (interp-cfwae (parse-cfwae expr) prelude)))
 
 
 ;;; Test Cases
