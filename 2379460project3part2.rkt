@@ -1,9 +1,8 @@
-
-#lang plai
-;;; EECS 662 - Miniproject 3
-;;;
-;;; Author: Jeff Cailteux
-;;; Date: 4/10/13
+; Jeff Cailteux
+; KUID: 2379460
+; Project 3 Part 2
+; EECS 662
+; CFWAE
 ;;;
 ;;; Description:
 ;;; CFWAER - The abstract data type for representing CFWAER ASTs
@@ -11,6 +10,8 @@
 ;;; fac5 - Concrete syntax for the example from class
 ;;;
 ;;; Based on utilities provided by Perry Alexander
+
+#lang plai
 
 ;;; Define an AST type for CFWAER constructs.
 (define-type CFWAER
@@ -68,10 +69,26 @@
           ((number? expr) (num expr))
           ((list? expr)
            (case (car expr)
-             ((-) (sub (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))
-             ((+) (add (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))
-             ((*) (mul (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))
-             ((/) (div (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))
+             ((-) (cond ((fun? (parse-cfwaer (cadr expr)))
+                         error parse-cfwaer "cannot perform arithmetic on a function")
+                        ((fun? (parse-cfwaer (caddr expr)))
+                         error parse-cfwaer "cannot perform arithmetic on a function")
+                        (else (sub (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))))
+             ((+) (cond ((fun? (parse-cfwaer (cadr expr)))
+                         error parse-cfwaer "cannot perform arithmetic on a function")
+                        ((fun? (parse-cfwaer (caddr expr)))
+                         error parse-cfwaer "cannot perform arithmetic on a function")
+                        (else (add (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))))
+             ((*) (cond ((fun? (parse-cfwaer (cadr expr)))
+                         error parse-cfwaer "cannot perform arithmetic on a function")
+                        ((fun? (parse-cfwaer (caddr expr)))
+                         error parse-cfwaer "cannot perform arithmetic on a function")
+                        (else (mul (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))))
+             ((/) (cond ((fun? (parse-cfwaer (cadr expr)))
+                         error parse-cfwaer "cannot perform arithmetic on a function")
+                        ((fun? (parse-cfwaer (caddr expr)))
+                         error parse-cfwaer "cannot perform arithmetic on a function")
+                        (else (div (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))))))
              ((with) (with (car (cadr expr)) 
                             (parse-cfwaer (cadr (cadr expr))) 
                             (parse-cfwaer (caddr expr))))
@@ -80,7 +97,9 @@
                             (parse-cfwaer (caddr expr))))
              ((if0) (if0 (parse-cfwaer (cadr expr)) (parse-cfwaer (caddr expr))
                          (parse-cfwaer (cadddr expr))))
-             ((fun) (fun (caadr expr) (parse-cfwaer (caddr expr))))
+             ((fun) (if (number? (cadr expr))
+                        (error parse-cfwaer "cannot call a number as a function")
+                        (fun (caadr expr) (parse-cfwaer (caddr expr)))))
              (else (app (parse-cfwaer (car expr)) (parse-cfwaer (cadr expr))))))
           (else 'parse-cfwaer "Unexpected token"))))
 
@@ -115,7 +134,6 @@
                             (aSub (closureV-arg fun-val)
                                   (interp-cfwaer expr ds)
                                   (closureV-ds fun-val)))))
-      ;need to change rec
       (rec (id expr body)
         (interp-cfwaer body
                 (bindinterp id expr ds)))
