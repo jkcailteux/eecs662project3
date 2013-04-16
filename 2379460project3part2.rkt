@@ -26,6 +26,40 @@
   (fun (arg-name symbol?) (body CFWAER?))
   (app (fun-expr CFWAER?)(arg CFWAER?)))
 
+;;; CFWAER Value type
+(define-type CFWAER-Value
+  (numV (n number?))
+  (closureV (arg symbol?)
+            (body CFWAER?)
+            (ds Env?)))
+
+;;Boxed Value
+(define (boxed-CFWAER-Value? v)
+  (and (box? v)
+       (CFWAER-Value? (unbox v))))
+
+;;; Deferred substitution type, with recursion
+(define-type Env
+  (mtSub)
+  (aSub (name symbol?) (value CFWAER-Value?) (ds Env?))
+  (aRecSub (name symbol?) (value boxed-CFWAER-Value?) (env Env?))
+  )
+
+;;; ds lookup
+(define lookup
+  (lambda (name ds)
+    (type-case Env ds
+      (mtSub () (error 'lookup "variable not found"))
+      (aSub (n v d)
+            (if (symbol=? n name)
+                v
+                (lookup name d)))
+      (aRecSub (n b d)
+               (if (symbol=? n name)
+                   (unbox b)
+                   (lookup n d)))
+      ))) 
+
 ;;; Define a parser for CFWAER constructs.  This parser does no error checking at all. Simply converts
 ;;; concrete syntax to AST.
 (define parse-cfwaer
@@ -50,27 +84,15 @@
              (else (app (parse-cfwaer (car expr)) (parse-cfwaer (cadr expr))))))
           (else 'parse-cfwaer "Unexpected token"))))
 
-;;; Deferred substitution type
-(define-type DefrdSub
-  (mtSub)
-  (aSub (name symbol?) (value CFWAER-Value?) (ds DefrdSub?)))
+;;; Cyclically bind and interp
+(define (bindinterp id expr ds)
+  (local((define value-holder (box (numV 1729)))
+         (define new-ds (aRecSub id value-holder ds))
+         (define named-expr (interp-cfwaer expr new-ds)))
+    (begin
+      (set-box! value-holder named-expr)
+      new-ds)))
 
-;;; ds lookup
-(define lookup
-  (lambda (name ds)
-    (type-case DefrdSub ds
-      (mtSub () (error 'lookup "variable not found"))
-      (aSub (n v d)
-            (if (symbol=? n name)
-                v
-                (lookup name d))))))
-
-;;; CFWAER Value type
-(define-type CFWAER-Value
-  (numV (n number?))
-  (closureV (arg symbol?)
-            (body CFWAER?)
-            (ds DefrdSub?)))
 
 ;;; Interpreting function
 (define interp-cfwaer
@@ -95,12 +117,8 @@
                                   (closureV-ds fun-val)))))
       ;need to change rec
       (rec (id expr body)
-        (local
-              ((define fun-val (interp-cfwaer (fun id body) ds)))
-              (interp-cfwaer (closureV-body fun-val)
-                            (aSub (closureV-arg fun-val)
-                                  (interp-cfwaer expr ds)
-                                  (closureV-ds fun-val)))))
+        (interp-cfwaer body
+                (bindinterp id expr ds)))
       (app (func arg)
            (local
              ((define fun-val (interp-cfwaer func ds)))
@@ -125,6 +143,6 @@
   `{rec {fac {fun {n} {if0 n 1 {* n {fac {+ n -1}}}}}}{fac 5}}
   )
 
-;;Test
-(parse-cfwaer fac5)
-(interp-cfwaer (parse-cfwaer fac5) (mtSub))
+;;Testing
+;(test (eval-cfwaer fac5) (numV 120))
+;(test (eval-cfwaer '(+ 1 2)) (numV 3))
